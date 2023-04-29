@@ -1,0 +1,217 @@
+ /*O código abaixo, gera uma View que separa, da tabela principal, as colunas necessárias para a primeira etapa.
+ Aqui, gero também a roluna "Resultado C-Trends" que a principal coluna para a próxima fase.*/
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE view [dbo].[VW_Efetividade_fechamento_resultado_ctrends] as 
+select 
+	cast(TB_PROJETO_FEDEX.Dt_Abertura as DATE) Data_Abertura,
+	cast(TB_PROJETO_FEDEX.Dt_Fechamento as DATE) Dt_Fechamento,
+	TB_PROJETO_FEDEX.Os OS,
+	PORTAL_NOVA_OS.OS NOVA_OS,
+	upper(isnull(TB_Relatorio_pedido.[Entregador Nome],TB_PROJETO_FEDEX.Nome_Tecnico)) Nome_Tecnico,
+	TB_PROJETO_FEDEX.Telefone_Tecnico,
+	TB_PROJETO_FEDEX.Ocorrencia,
+	upper(TB_PROJETO_FEDEX.Atendente_Abertura) Atendente_Abertura,
+	case 
+		when TB_PROJETO_FEDEX.Atendente_Abertura = 'Online' then 'APP'
+		else '0800'
+	end [Meio de abertura],
+	TB_PROJETO_FEDEX.Problema_Apresentado,
+	replace(TB_PROJETO_FEDEX.Nr_Atendimento,' ','') Nr_Atendimento, 
+	TB_PROJETO_FEDEX.[Status],
+	--Adicionado Resultado C-trends em forma de função // alterado em 18/05/2022
+	dbo.Fn_resultado_ctrends(TB_PROJETO_FEDEX.[status],Acao_D1,ACAO_D29) [Resultado C-Trends],
+	--Adicionado Resultado C-trends em forma de função // alterado em 18/05/2022
+	TB_PROJETO_FEDEX.Retorno_Tecnico,
+	CONVERT(VARCHAR(10), TB_PROJETO_FEDEX.Dt_Fechamento, 103) Data_fechamento,
+	TB_PROJETO_FEDEX.Alteracao_Cadastral,
+	upper(isnull(TB_PROJETO_FEDEX.Atendente_Fechamento,TB_PROJETO_FEDEX.Atendente_Abertura)) Atendente_Fechamento,
+	TB_PROJETO_FEDEX.Projeto,
+	TB_PROJETO_FEDEX.D1,
+	TB_PROJETO_FEDEX.Tipo_Atendimento,
+	TB_PROJETO_FEDEX.Cep,
+	TB_PROJETO_FEDEX.Alteracao_Endereco,
+	TB_PROJETO_FEDEX.Alteracao_Telefone,
+	TB_PROJETO_FEDEX.Alteracao_HF,
+	TB_PROJETO_FEDEX.Acao_D1,
+	isnull(TB_PROJETO_FEDEX.Atendente_Fechamento_D1, TB_PROJETO_FEDEX.Atendente_Abertura) Atendente_Fechamento_D1,
+	isnull(TB_PROJETO_FEDEX.Atendente_Fechamento_D29, TB_PROJETO_FEDEX.Atendente_Abertura) Atendente_Fechamento_D29,
+	TB_PROJETO_FEDEX.Acao_D29,
+	TB_PROJETO_FEDEX.Qtd_Equipamentos,
+	TB_PROJETO_FEDEX.Tecnologia,
+	TB_PROJETO_FEDEX.Razao_Social,
+	TB_PROJETO_FEDEX.Tipo_Logradouro,
+	TB_PROJETO_FEDEX.Numero,
+	TB_PROJETO_FEDEX.Bairro,
+	TB_PROJETO_FEDEX.Cidade,
+	TB_PROJETO_FEDEX.Kilometragem,
+	TB_PROJETO_FEDEX.UF,
+	TB_PROJETO_FEDEX.Complemento,
+	TB_PROJETO_FEDEX.PReferencia,
+	TB_PROJETO_FEDEX.Subprojeto,
+	TB_PROJETO_FEDEX.Modelo,
+	TB_PROJETO_FEDEX.PV,
+	TB_PROJETO_FEDEX.PREV_ATENDIMENTO,
+	TB_PROJETO_FEDEX.GETC,
+	TB_PROJETO_FEDEX.Dt_ultima_atu,
+	TB_PROJETO_FEDEX.FASE,
+	TB_PROJETO_FEDEX.CONCLUSAO_OPERADOR,
+	TB_PROJETO_FEDEX.DEFINICAO,
+	TB_PROJETO_FEDEX.STATUS_RELATORIO,
+	TB_PROJETO_FEDEX.CONTATO_TELEFONICO,
+	TB_PROJETO_FEDEX.ETAPA,
+	TB_PROJETO_FEDEX.CPF,
+	Convert(varchar(max),'https://www.google.com.br/maps/?q=' + (Select TB_PROJETO_FEDEX.LATITUDE)) + ',' +  CONVERT(Nvarchar, TB_PROJETO_FEDEX.LONGITUDE) AS GEOLOCALIZACAO,
+	TB_PROJETO_FEDEX.IMAGEURL,
+	TB_PROJETO_FEDEX.Cliente,
+	TB_PROJETO_FEDEX.Fechto_D0,
+	TB_PROJETO_FEDEX.CHAVE,
+	isnull(TB_Relatorio_pedido.[Status],'Nova OS não encontrada!') [Status-rlog],
+	TB_Relatorio_pedido.[Descrição Última Ocorrência],
+	isnull(TB_Relatorio_pedido.[Descrição Penúltima Ocorrência],'0') [Descrição Penúltima Ocorrência],
+	isnull(TB_Relatorio_pedido.[Descrição Antepenúltima Ocorrência],'0') [Descrição Antepenúltima Ocorrência],
+	CAST(TB_Relatorio_pedido.[Data Pre-Baixa] AS DATE) [Data Pre-Baixa],
+	CAST(TB_Relatorio_pedido.[Data Baixa Sistema] AS DATE) [Data Baixa Sistema],
+	TB_Relatorio_pedido.[Chamado Cancelado],
+	isnull(TB_Relatorio_pedido.unidade,UPPER(TB_PROJETO_FEDEX.Unidade)) Unidade,
+	TB_Relatorio_pedido.[Região Destino/Atendimento] [Região],
+	TB_Relatorio_pedido.UF [UF-rlog],
+	TB_Relatorio_pedido.Cidade [Cidade-rlog],
+	Meio_Captura
+from TB_PROJETO_FEDEX 
+--left join TB_Relatorio_pedido on TB_PROJETO_FEDEX.Os = TB_Relatorio_pedido.os
+ left join PORTAL_NOVA_OS on PORTAL_NOVA_OS.OS_ANTIGA = TB_PROJETO_FEDEX.os
+ left join TB_Relatorio_pedido on TB_Relatorio_pedido.os = PORTAL_NOVA_OS.os 
+where TB_PROJETO_FEDEX.Projeto <>'C6-BANK'
+and cast(Dt_ultima_atu as date) >=  CAST(getdate()-35 as date)--[dbo].[fn_antepenultimo_dia_util_do_mes_passado]() --cast(DATEADD(DAY, CASE DATENAME(WEEKDAY, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE()))WHEN 'Sunday' THEN -2 ELSE -0 END, DATEDIFF(DAY, 0, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE())))-2 as date)	
+and cast(Dt_Fechamento as date) <> CAST(getdate() as date)
+	and cast(Dt_Abertura as date) > dateadd(month,-2,[dbo].[fn_antepenultimo_dia_util_do_mes_passado]()) --cast(DATEADD(DAY, CASE DATENAME(WEEKDAY, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE()))  WHEN 'Sunday' THEN -2 ELSE -0 END, DATEDIFF(DAY, 0, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE())))-31 as date)
+	and (
+		(TB_PROJETO_FEDEX.[status] = 'FICOU EM TRATATIVA D+1' and Acao_D1 = 'TRATATIVA D+1 AJUSTE + SOLICITAÇÃO DE EQUIPAMENTO' )
+		or 
+		(Acao_D1 = 'MIGROU TRATATIVA CAÇA-POS' and Acao_D29 in('TRATATIVA D+8 + AJUSTE CADASTRAL','OS REAGENDAMENTO'))
+		or
+		(TB_PROJETO_FEDEX.Projeto = 'CTB' AND Acao_D1 = 'MIGROU D+8' AND ACAO_D29 = 'TRATATIVA D+8 + AJUSTE CADASTRAL (FOI PARA CAÇA-POS)')
+		)
+	--and TB_Relatorio_pedido.[Entregador Nome] is null
+
+--and PORTAL_NOVA_OS.OS_ANTIGA = 'CP452211381083'
+
+UNION ALL 
+
+--23065
+--22791
+select 
+	cast(Dt_Abertura as DATE) Data_Abertura,
+	cast(TB_PROJETO_FEDEX.Dt_Fechamento as DATE) Dt_Fechamento,
+	TB_PROJETO_FEDEX.OS,
+	NOVA_OS = null,
+	upper(isnull(TB_Relatorio_pedido.[Entregador Nome],TB_PROJETO_FEDEX.Nome_Tecnico)) Nome_Tecnico,
+	Telefone_Tecnico,
+	Ocorrencia,
+	upper(Atendente_Abertura) Atendente_Abertura,
+	case 
+		when Atendente_Abertura = 'Online' then 'APP'
+		else '0800'
+	end [Meio de abertura],
+	Problema_Apresentado,
+	replace(Nr_Atendimento,' ','') Nr_Atendimento, 
+	TB_PROJETO_FEDEX.[Status],
+	
+	--Adicionado Resultado C-trends em forma de função // alterado em 18/05/2022
+	dbo.Fn_resultado_ctrends(TB_PROJETO_FEDEX.[status],Acao_D1,ACAO_D29) [Resultado C-Trends],
+	Retorno_Tecnico,
+	CONVERT(VARCHAR(10), Dt_Fechamento, 103) Data_fechamento,
+	Alteracao_Cadastral,
+	upper(isnull(Atendente_Fechamento,Atendente_Abertura)) Atendente_Fechamento,
+	TB_PROJETO_FEDEX.Projeto,
+	D1,
+	Tipo_Atendimento,
+	TB_PROJETO_FEDEX.Cep,
+	Alteracao_Endereco,
+	Alteracao_Telefone,
+	Alteracao_HF,
+	Acao_D1,
+	isnull(Atendente_Fechamento_D1, Atendente_Abertura) Atendente_Fechamento_D1,
+	isnull(Atendente_Fechamento_D29, Atendente_Abertura) Atendente_Fechamento_D29,
+	Acao_D29,
+	Qtd_Equipamentos,
+	Tecnologia,
+	Razao_Social,
+	Tipo_Logradouro,
+	TB_PROJETO_FEDEX.Numero,
+	TB_PROJETO_FEDEX.Bairro,
+	TB_PROJETO_FEDEX.Cidade,
+	Kilometragem,
+	TB_PROJETO_FEDEX.UF,
+	TB_PROJETO_FEDEX.Complemento,
+	PReferencia,
+	TB_PROJETO_FEDEX.Subprojeto,
+	Modelo,
+	PV,
+	PREV_ATENDIMENTO,
+	GETC,
+	Dt_ultima_atu,
+	FASE,
+	CONCLUSAO_OPERADOR,
+	DEFINICAO,
+	STATUS_RELATORIO,
+	CONTATO_TELEFONICO,
+	ETAPA,
+	CPF,
+	Convert(varchar(max),'https://www.google.com.br/maps/?q=' + (Select LATITUDE)) + ',' +  CONVERT(Nvarchar, LONGITUDE) AS GEOLOCALIZACAO,
+	IMAGEURL,
+	TB_PROJETO_FEDEX.Cliente,
+	Fechto_D0,
+	CHAVE,
+
+	TB_Relatorio_pedido.[Status] [Status-rlog],
+	TB_Relatorio_pedido.[Descrição Última Ocorrência],
+	isnull(TB_Relatorio_pedido.[Descrição Penúltima Ocorrência],'0') [Descrição Penúltima Ocorrência],
+	isnull(TB_Relatorio_pedido.[Descrição Antepenúltima Ocorrência],'0') [Descrição Antepenúltima Ocorrência],
+	CAST(TB_Relatorio_pedido.[Data Pre-Baixa] AS DATE) [Data Pre-Baixa],
+	CAST(TB_Relatorio_pedido.[Data Baixa Sistema] AS DATE) [Data Baixa Sistema],
+	TB_Relatorio_pedido.[Chamado Cancelado],
+	ISNULL(TB_Relatorio_pedido.unidade,UPPER(TB_PROJETO_FEDEX.UNIDADE)) Unidade,
+	TB_Relatorio_pedido.[Região Destino/Atendimento] [Região],
+	TB_Relatorio_pedido.UF [UF-rlog],
+	TB_Relatorio_pedido.Cidade [Cidade-rlog],
+	Meio_Captura
+from TB_PROJETO_FEDEX 
+left join TB_Relatorio_pedido on TB_PROJETO_FEDEX.Os = TB_Relatorio_pedido.os
+--join PORTAL_NOVA_OS on PORTAL_NOVA_OS.OS = TB_Relatorio_pedido.os
+where --TB_PROJETO_FEDEX.OS = '14224004' AND
+cast(Dt_ultima_atu as date) >= CAST(getdate()-35 as date) --[dbo].[fn_antepenultimo_dia_util_do_mes_passado]() --cast(DATEADD(DAY, CASE DATENAME(WEEKDAY, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE()))WHEN 'Sunday' THEN -2 ELSE -0 END, DATEDIFF(DAY, 0, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE())))-2 as date)	
+and cast(Dt_Fechamento as date) <> CAST(getdate() as date)
+	and cast(Dt_Abertura as date) > dateadd(month,-2,[dbo].[fn_antepenultimo_dia_util_do_mes_passado]()) --cast(DATEADD(DAY, CASE DATENAME(WEEKDAY, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE()))  WHEN 'Sunday' THEN -2 ELSE -0 END, DATEDIFF(DAY, 0, DATEADD(DD, -DAY(DATEADD(M, 1,  GETDATE())),  GETDATE())))-31 as date)
+	and (
+		Acao_D1 <> 'TRATATIVA D+1 AJUSTE + SOLICITAÇÃO DE EQUIPAMENTO' 
+		or 
+		Acao_D1 = 'MIGROU TRATATIVA CAÇA-POS' and Acao_D29 <> 'TRATATIVA D+8 + AJUSTE CADASTRAL'
+		)
+	--and Acao_D29 = 'TRATATIVA D+8 + AJUSTE CADASTRAL'
+--and TB_PROJETO_FEDEX.OS = '14224004'
+
+
+
+
+
+
+
+
+
+
+
+
+
+GO
+
+
