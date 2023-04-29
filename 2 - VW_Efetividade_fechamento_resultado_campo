@@ -1,0 +1,324 @@
+/*Mantenho alguns dos valores da view anterior, nas adiciono o campo calculado "Resultado de Campo", que é o que será usado para saber se devemos ou não pagar o Atendente.*/
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE View [dbo].[VW_Efetividade_fechamento_resultado_campo] as 
+
+select  --DISTINCT
+
+	[OS],
+	[Nova_OS],
+	
+	[Data_Abertura],
+	CAST([Dt_Fechamento] AS DATE) [Dt_Fechamento],
+	[Nome_Tecnico],
+	[Telefone_Tecnico],
+	[Ocorrencia],
+	[Atendente_Abertura],
+	[Meio de abertura],
+	[Problema_Apresentado],
+	[Nr_Atendimento],
+	[Status],
+	[Resultado C-Trends],
+	[Retorno_Tecnico],
+	--CAST([Data_fechamento] AS DATE) [Data_fechamento], 
+	[Alteracao_Cadastral],
+	[Atendente_Fechamento],
+	[Projeto],
+	[D1],
+	[Tipo_Atendimento],
+	[Cep],
+	[Alteracao_Endereco],
+	[Alteracao_Telefone],
+	[Alteracao_HF],
+	[Acao_D1],
+	[Atendente_Fechamento_D1],
+	[Atendente_Fechamento_D29],
+	[Acao_D29],
+	[Qtd_Equipamentos],
+	[Tecnologia],
+	[Razao_Social],
+	[Tipo_Logradouro],
+	[Numero],
+	[Bairro],
+	[Cidade],
+	[Kilometragem],
+	[UF],
+	[Complemento],
+	[PReferencia],
+	[Subprojeto],
+	[Modelo],
+	[PV],
+	[PREV_ATENDIMENTO],
+	[GETC],
+	[Dt_ultima_atu],
+	[FASE],
+	[CONCLUSAO_OPERADOR],
+	[DEFINICAO],
+	[STATUS_RELATORIO],
+	[CONTATO_TELEFONICO],
+	[ETAPA],
+	[CPF],
+	[GEOLOCALIZACAO],
+	[IMAGEURL],
+	[Cliente],
+	[Fechto_D0],
+	[CHAVE],
+	[Status-rlog],
+	[Descrição Última Ocorrência],
+	[Descrição Penúltima Ocorrência],
+	[Descrição Antepenúltima Ocorrência],
+	[Data Pre-Baixa],
+	[Data Baixa Sistema],
+	[Chamado Cancelado],
+	[unidade],
+	[Região],
+	[UF-rlog],
+	[Cidade-rlog],
+	[Resultado_Campo] = 
+	case
+		
+		
+		
+		--when [Resultado C-Trends] = 'SUCESSO CAÇA-POS' then 'Consultar planilha Caça-POS'
+		when [Status-rlog] = 'Nova OS não encontrada!' then 'Nova OS não foi criada/localizada'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') 
+			and [Descrição Última Ocorrência] = 'AJUSTE DE PRAZO (FISERV)'	and [Descrição Penúltima Ocorrência] = 'AJUSTE DE PRAZO (FISERV)' and [Descrição Antepenúltima Ocorrência] = 'AJUSTE DE PRAZO (FISERV)' 
+			and [Data Pre-Baixa] IS null  and [Chamado Cancelado] = 'Não'	then 'xxxxx-Analisar-xxxxx'
+		
+		WHEN [Resultado C-Trends] IN('SUCESSO D+0','SUCESSO D+1','SUCESSO D+1 + AJUSTE','SUCESSO D+8','REAG COM CONTATO') and [Status-rlog] is null then 'OS não encontrada. Analisar'
+		when [Resultado C-Trends] = 'SUCESSO CAÇA-POS' and [Status-rlog] IS null then 'Nova OS não foi criada/localizada'
+		
+		
+		
+	--*****************************------FEDEX------*****************************--
+		------***********************--Sucesso D+0--***********************------
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND  [Resultado C-Trends] = 'SUCESSO D+0' AND [Status-rlog] is not null and [Data Pre-Baixa] IS null and [Data Baixa Sistema] IS null then 'Pendente de Baixa D+0'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND  [Resultado C-Trends] = 'SUCESSO D+0' AND [Status-rlog]  IN('Em Atendimento (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso',
+									'OS reaberta contato com Sucesso (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso  (Com Ocorrencia)',
+									'Aberto',
+									'Em Atendimento',
+									'Aberto  (Com Ocorrencia)',
+									'Aberto (Com Ocorrencia)',
+									'Em Análise',
+									'Em Análise (Com Ocorrencia)',
+									'Em Análise  (Com Ocorrencia)') then 'Pendente de Baixa D+0'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		and [Resultado C-Trends] = 'SUCESSO D+0' AND  [Descrição Penúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		and [Resultado C-Trends] = 'SUCESSO D+0' AND [Descrição Antepenúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		--AND [Chamado Cancelado] <> 'NÃO'
+		AND [Data Pre-Baixa] IS  NULL
+		--AND [Data Baixa Sistema] IS NOT NULL
+		THEN 'INSUCESSO D+0'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND  [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Pre-Baixa] AS date) then 'Sucesso D+0'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Pre-Baixa] then 'Sucesso Após D+0'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Pre-Baixa] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Baixa Sistema] AS date) then 'Sucesso D+0'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Baixa Sistema] then 'Sucesso Após D+0'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Baixa Sistema] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Chamado Cancelado] = 'SIM' THEN 'INSUCESSO D+0'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+0' THEN 'Sucesso D+0 sem tratar'
+		
+		------***********************--Fim sucesso D+0--***********************------
+		
+		------***********************--Sucesso D+1--***********************------
+			WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Status-rlog] is not null and [Data Pre-Baixa] IS null and [Data Baixa Sistema] IS null then 'Pendente de Baixa D+1'
+			WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Status-rlog]  IN('Em Atendimento (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso',
+									'OS reaberta contato com Sucesso (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso  (Com Ocorrencia)',
+									'Aberto',
+									'Em Atendimento',
+									'Aberto  (Com Ocorrencia)',
+									'Aberto (Com Ocorrencia)',
+									'Em Análise',
+									'Em Análise (Com Ocorrencia)',
+									'Em Análise  (Com Ocorrencia)') then 'Pendente de Baixa D+1'
+		
+		
+		
+		WHEN Projeto = 'C6-BANK'  AND [Resultado C-Trends] = 'SUCESSO D+1'  AND RIGHT([Descrição Última Ocorrência],4) in('(OC)','(BX)') and [Descrição Penúltima Ocorrência] = 'REABERTURA DO PEDIDO' AND [Descrição Antepenúltima Ocorrência] = 'REABERTURA DO PEDIDO' THEN 'INSUCESSO D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		AND  [Descrição Penúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		AND [Descrição Antepenúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		--AND [Chamado Cancelado] <> 'NÃO'
+		AND [Data Pre-Baixa] IS  NULL
+		--AND [Data Baixa Sistema] IS NOT NULL
+		THEN 'INSUCESSO D+1'
+		/*
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		AND  [Descrição Penúltima Ocorrência] IS not null
+		AND [Descrição Antepenúltima Ocorrência] IS not null
+		THEN 'INSUCESSO D+1'
+		*/
+
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND  [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Pre-Baixa] AS date) then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Pre-Baixa] then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Pre-Baixa] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Baixa Sistema] AS date) then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Baixa Sistema] then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Baixa Sistema] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' AND [Chamado Cancelado] = 'SIM' THEN 'INSUCESSO D+1'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1' THEN 'Sucesso D+1 sem tratar'
+		
+		------***********************--Fim sucesso D+1--***********************------
+		
+		
+		
+		
+		------***********************--Sucesso D+1 AJUSTE--***********************------
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Status-rlog] is not null and [Data Pre-Baixa] IS null and [Data Baixa Sistema] IS null then 'Pendente de Baixa D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Status-rlog]  IN('Em Atendimento (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso',
+									'OS reaberta contato com Sucesso (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso  (Com Ocorrencia)',
+									'Aberto',
+									'Em Atendimento',
+									'Aberto  (Com Ocorrencia)',
+									'Aberto (Com Ocorrencia)',
+									'Em Análise',
+									'Em Análise (Com Ocorrencia)',
+									'Em Análise  (Com Ocorrencia)') 
+		then 'Pendente de Baixa D+1'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		AND  [Descrição Penúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		AND [Descrição Antepenúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		--AND [Chamado Cancelado] <> 'NÃO'
+		AND [Data Pre-Baixa] IS  NULL
+		--AND [Data Baixa Sistema] IS NOT NULL
+		THEN 'INSUCESSO D+1'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		AND  [Descrição Penúltima Ocorrência] IS not null
+		AND [Descrição Antepenúltima Ocorrência] IS not null
+		THEN 'INSUCESSO D+1'
+
+
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND  [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Pre-Baixa] AS date) then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Pre-Baixa] then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Pre-Baixa] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Baixa Sistema] AS date) then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Baixa Sistema] then 'Sucesso D+1'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Baixa Sistema] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' AND [Chamado Cancelado] = 'SIM' THEN 'INSUCESSO D+1'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+1 + AJUSTE' THEN 'Sucesso D+1 sem tratar'
+		
+		
+		------***********************--Fim sucesso D+1 AJUSTE--***********************------
+		
+		
+		
+		------***********************--Sucesso D+8--***********************------
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Status-rlog] is not null and [Data Pre-Baixa] IS null and [Data Baixa Sistema] IS null then 'Pendente de Baixa D+8'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Status-rlog]  IN('Em Atendimento (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso',
+									'OS reaberta contato com Sucesso (Com Ocorrencia)',
+									'OS reaberta contato com Sucesso  (Com Ocorrencia)',
+									'Aberto',
+									'Em Atendimento',
+									'Aberto  (Com Ocorrencia)',
+									'Aberto (Com Ocorrencia)',
+									'Em Análise',
+									'Em Análise (Com Ocorrencia)',
+									'Em Análise  (Com Ocorrencia)') then 'Pendente de Baixa D+8'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Descrição Última Ocorrência] in('Alteração do Cadastro do Pedido','REABERTURA DO PEDIDO','ALTEROU PRODUTO')
+		and [Resultado C-Trends] = 'SUCESSO D+8' AND  [Descrição Penúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		and [Resultado C-Trends] = 'SUCESSO D+8' AND [Descrição Antepenúltima Ocorrência] not IN('0','ATENDIMENTO REMOTO FISERV','ATUALIZAÇÃO REALIZADA COM SUCESSO','PEDIDO REALIZADO','PILOTO TROCA DE SIM CARD - REALIZADO COM SUCESSO','PIN PAD DESINSTALADO','PIN PAD ENTREGUE','PRE BAIXA REALIZADA (ATENDIMENTO COM SUCESSO)')
+		--AND [Chamado Cancelado] <> 'NÃO'
+		AND [Data Pre-Baixa] IS  NULL
+		--AND [Data Baixa Sistema] IS NOT NULL	
+		THEN 'INSUCESSO D+8'
+		
+		when Projeto = 'C6-BANK' AND  [Resultado C-Trends] = 'SUCESSO D+8' AND  [Chamado Cancelado] = 'NÃO' AND [Data Baixa Sistema] IS NOT NULL
+				and RIGHT([Descrição Última Ocorrência],4) in('(OC)','(BX)')
+				
+		then 'INSUCESSO D+8'
+		
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND  [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Pre-Baixa] AS date) then 'Sucesso D+8'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Pre-Baixa] then 'Sucesso D+8'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Pre-Baixa] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND cast([Data_Abertura] AS date) = cast([Data Baixa Sistema] AS date) then 'Sucesso D+8'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] < [Data Baixa Sistema] then 'Sucesso D+8'
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Data Pre-Baixa] IS NULL AND [Chamado Cancelado] = 'NÃO' AND [Data_Abertura] > [Data Baixa Sistema] then 'Verificar OS'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' AND [Chamado Cancelado] = 'SIM' THEN 'INSUCESSO D+8'
+		
+		WHEN Projeto IN ('CTB','FIRST','C6-BANK') AND [Resultado C-Trends] = 'SUCESSO D+8' THEN 'Sucesso D+8 sem tratar'
+		
+		------*********************--Fim sucesso D+8--*********************------
+		
+	/*--**********************************------SEQUOIA------**********************************--*/
+		When Projeto = 'SAFRAPAY' AND [Resultado C-Trends] IN('VISITA VALIDADA','VISITA INVÁLIDA') then [Resultado C-Trends]
+		When Projeto = 'SAFRAPAY' AND [Resultado C-Trends] = 'PESQUISA - INSUCESSO' THEN 'Insucesso Pesquisa'
+		When Projeto = 'SAFRAPAY' AND [Resultado C-Trends] = 'PESQUISA - SUCESSO' AND [Status-rlog] = 'ENCERRADO' THEN 'Sucesso Pesquisa'
+		When Projeto = 'SAFRAPAY' AND [Resultado C-Trends] = 'PESQUISA - SUCESSO' AND [Status-rlog] = 'PENDENTE' THEN 'PENDENTE'
+	
+	
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Status-rlog] = 'ENCERRADO' THEN 'Sucesso D+0'
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] in('SUCESSO D+1','REAG COM CONTATO') AND [Status-rlog] = 'ENCERRADO' THEN 'Sucesso D+1'
+		
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] = 'SUCESSO D+0' AND [Status-rlog] = 'CANCELADO' THEN 'INSUCESSO D+0'
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] ='REAG COM CONTATO' AND [Status-rlog] = 'CANCELADO' THEN 'INSUCESSO D+0'
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] ='SUCESSO D+1' AND [Status-rlog] = 'CANCELADO' THEN 'INSUCESSO D+1'
+		
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] in('SUCESSO D+0','SUCESSO D+1','REAG COM CONTATO') THEN 'PENDENTE'
+		---------------------------- Caça_POS ----------------------------
+		
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] = 'SUCESSO CAÇA-POS' AND [Status-rlog] = 'ENCERRADO' THEN 'Sucesso Caça-POS'
+		
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] = 'SUCESSO CAÇA-POS' AND [Status-rlog] = 'CANCELADO' THEN 'INSUCESSO D+0'
+		
+		When Projeto IN('FISEQ','SAFRAPAY') AND [Resultado C-Trends] ='SUCESSO CAÇA-POS' THEN 'PENDENTE'
+		
+		--when [Status-rlog] IS NULL  then 'OS não foi encontrada (INSUCESSOS)'
+		
+		ELSE [Resultado C-Trends]
+		
+	end,
+	[F1] = '',
+	Meio_Captura
+	
+from VW_Efetividade_fechamento_resultado_ctrends
+
+where [Resultado C-Trends] not IN(
+								'CANCELADA ATERS-IMAC',
+								'CANCELADA R-LOG',
+								'ERRO DE ABERTURA',
+								'OS INDISPONÍVEL',
+								'PEDIDO REALIZADO',
+								'INSUCESSO D+8 (SEM AÇÃO)'
+			)
