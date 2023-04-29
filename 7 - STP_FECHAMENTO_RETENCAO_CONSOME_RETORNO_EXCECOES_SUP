@@ -1,0 +1,56 @@
+/*
+Tipo: Stored procedure
+Função:  Consome o retorno do arquivo enviado por e-mail para a supervisão
+Parâmetros:  requer arquivo salvo na pasta
+Retorno: Nenhumn
+*/
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ALTER procedure [dbo].[STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_EXCECOES_SUP] AS
+
+
+
+CREATE TABLE #TB_FECHAMENTO_EXCECOES_ATENDENTES(
+	[Nome_Atendente] [varchar](100) NOT NULL,
+	[0800] [money] NULL,
+	[Treinamento] [money] NULL,
+	[Rig Vizzion] [money] NULL,
+	[Bônus comprometimento] [money] NULL,
+	[Dias na central] [int] NULL,
+	[Exceção meta] [bit] NULL
+	)
+
+
+
+INSERT INTO #TB_FECHAMENTO_EXCECOES_ATENDENTES(Nome_Atendente,[0800],Treinamento,[Rig Vizzion],[Bônus comprometimento],[Exceção meta])
+
+
+Select 
+	[Nome_Atendente],
+	[Bônus 0800],
+	[Treinamento],
+	[Rig Vizzion],
+	[Bônus comprometimento],
+	[Exceção meta]= replace(ISNULL([Exceção meta],0),'x',1)
+FROM OPENROWSET('Microsoft.ACE.OLEDB.12.0' ,'Excel 12.0;Database=E:\CONSUMIR\Excecoes_fechamento.xlsx;HDR=YES;IMEX=1' ,[Excecoes_fechamento$]) TBA
+
+
+update TB_FECHAMENTO_EXCECOES_ATENDENTES set
+	[0800]= #TB_FECHAMENTO_EXCECOES_ATENDENTES.[0800],
+	Treinamento = #TB_FECHAMENTO_EXCECOES_ATENDENTES.Treinamento,
+	[Rig Vizzion] = #TB_FECHAMENTO_EXCECOES_ATENDENTES.[Rig Vizzion],
+	[Bônus comprometimento] = #TB_FECHAMENTO_EXCECOES_ATENDENTES.[Bônus comprometimento],
+	[Exceção meta] = #TB_FECHAMENTO_EXCECOES_ATENDENTES.[Exceção meta]
+	
+from #TB_FECHAMENTO_EXCECOES_ATENDENTES
+where TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente = #TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente
+
+
+select 'Excecoes_fechamento.xlsx consumido às: ' + CONVERT(char, getdate(),8)
