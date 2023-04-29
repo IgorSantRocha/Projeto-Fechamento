@@ -1,0 +1,112 @@
+/*Tipo: Stored procedure
+Função:  Envia e-mail com uma lista para ser preenchida e devolvida pela supervisão (mais dúvidas, consultar o manual de usuário)
+Parâmetros: Nenhum
+Retorno: Nenhum
+*/
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+ALTER procedure [dbo].[STP_FECHAMENTO_RETENCAO_EXCECOES_ATENDENTES] AS
+
+--Insiro na tabela os atendentes que ainda não tinham sido inseridos
+insert into TB_FECHAMENTO_EXCECOES_ATENDENTES(Nome_Atendente)
+select distinct
+	Atendente_Fechamento
+from TB_Efetividade_OP
+where F1 = 'OP'
+and not exists(select Nome_Atendente from TB_FECHAMENTO_EXCECOES_ATENDENTES where TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente = TB_Efetividade_OP.Atendente_Fechamento)
+
+--Deleto os atendentes que não estão na efetividade desse mês desse mês
+Delete from TB_FECHAMENTO_EXCECOES_ATENDENTES where not exists(select TB_Efetividade_OP.Atendente_Fechamento from TB_Efetividade_OP where TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente = TB_Efetividade_OP.Atendente_Fechamento AND Filtro_sucessos ='')
+
+--A tabela TB_FECHAMENTO_EXCECOES_ATENDENTES contém apenas pessoas com salvamento nesse mês.
+--Mas o time RV não costuma tratar casos na fila, etão vão sempre estar zerados. Insiro eles para poder calcular o Bônus RV
+INSERT INTO TB_FECHAMENTO_EXCECOES_ATENDENTES (Nome_Atendente)
+select 
+[Nome Atendente]
+from [TB_FECHAMENTO_RIG_VIZZION]
+WHERE NOT EXISTS(SELECT * FROM TB_FECHAMENTO_EXCECOES_ATENDENTES WHERE TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente = [TB_FECHAMENTO_RIG_VIZZION].[Nome Atendente])
+
+
+--Marco a coluna de dias na central para saber quantos dias tem que o usuário do atendente foi criado
+update  TB_FECHAMENTO_EXCECOES_ATENDENTES
+	set
+	[Dias na central] = DATEDIFF(DAY, TB_Usuario_Fedex_Nome_Completo.CriadoEm,GETDATE())
+FROM usuario_fedex
+LEFT JOIN TB_Usuario_Fedex_Nome_Completo ON usuario_fedex.id = TB_Usuario_Fedex_Nome_Completo.ID_Usuario
+where usuario_fedex.nome = TB_FECHAMENTO_EXCECOES_ATENDENTES.Nome_Atendente
+
+
+--Marco como exceção da meta todos os atendentes que entraram a menos de 30 dias
+update TB_FECHAMENTO_EXCECOES_ATENDENTES set [Exceção meta] = 1 where [Dias na central] <=30
+
+
+
+
+--Manda E-mail para a supervisão informar os valores de exceções
+DECLARE @tableHTML  NVARCHAR(MAX)
+		declare @Assunto varchar(max)
+		set @Assunto = 'URGENTE: Informar exceções e bonus p/ Fechamento ' + dbo.fn_cria_data_padrao_historico()
+
+		SET @tableHTML =
+		   '<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="utf-8">
+			<style type="text/css">
+				.Azul{
+				  color: blue;
+				}
+				.italico{
+					font-style: italic;
+				}
+				.sublinhado{
+					text-decoration: underline
+				}
+			</style>
+			<title>teste</title>
+		</head>
+		<body>
+			<h3>Olá!</h3>
+			Segue arquivo com os nomes dos atendentes da CENTRAL para informar os valores de bônus e exceções.
+			<br>
+			Favor preencher cada coluna com o valor inteiro. Exemplo: R$ 150,00, colocar na planilha 150.
+			<br>
+			<br>
+			Caso seja necessário excetuar o atendente da meta, basta marcar um X na coluna [Exceção meta].
+			<br>
+			<br>
+			<span class="italico">Atenciosamente</span> 	<br><br>
+			<strong class="negrito">Igor Rocha</strong> 	<br>
+			Líder da Digitação	<br>
+			<strong>Tel.: (11) 2824-6399</strong>	<br>
+			<span class="Azul sublinhado">www.c-trends.com.br</span>  | <span class="Azul sublinhado">igor.rocha@c-trends.com.br</span>	<br>
+			Rua Bonfim, 81 | 03073-010 | São Paulo – SP
+		</body>
+		</html>'
+			;
+		EXEC msdb.dbo.sp_send_dbmail 
+		  @profile_name = 'DB211',
+		  @recipients = 'igor.rocha@c-trends.com.br;gabriel.romeiro@c-trends.com.br;rafael.cavichiolli@c-trends.com.br;alex.lima@c-trends.com.br',--;igor.rocha',
+		  @subject = @Assunto,-- 'Agendamentos Hora a Hora',
+		  @body = @tableHTML,
+		  @body_format = 'HTML',
+		  @query = 'select 	Nome_Atendente,	[Bônus 0800]  = CAST([0800] AS INT),Treinamento  = CAST(Treinamento AS INT),	[Rig Vizzion]  = CAST([Rig Vizzion] AS INT),	[Bônus comprometimento]  = CAST([Bônus comprometimento] AS INT),	[Exceção meta] = replace(REPLACE([Exceção meta],0,''''),1,''X''),	[Dias na central] from Agyx_Estatistica.dbo.TB_FECHAMENTO_EXCECOES_ATENDENTES', 
+		  @attach_query_result_as_file = 1,
+		  @query_result_separator = '	',
+		  @query_result_width = 32767,
+		  @exclude_query_output = 1,
+		  @query_result_no_padding = 1,
+		  @append_query_error = 1,
+		  @query_attachment_filename = 'FECHAMENTO_EXCECOES_ATENDENTES.XLS',
+		  @query_result_header = 1
+
+
+
+
