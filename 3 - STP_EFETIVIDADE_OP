@@ -1,0 +1,127 @@
+/*Essa é uma stored procedure que tem a função de armazenar o valor calculado na VW_Efetividade_fechamento_resultado_campo em uma tabela estática no sistema.
+A fim de diminuir oprocessamento na hora dos cálculos.
+Faço também alguns tratamentos nos dados antes de inser-los na tabela final.*/
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ALTER PROCEDURE [dbo].[STP_EFETIVIDADE_OP] AS 
+
+
+truncate table TB_Efetividade_OP
+
+--Isere o resultado das analises na tabela de efetividade
+insert into TB_Efetividade_OP
+(	os,
+	Nova_OS,
+	Atendente_Fechamento,
+	Dt_fechamento,
+	Resultado_Campo,
+	F1,
+	Filtro_sucessos)
+	
+select 
+	os,
+	Nova_OS,
+	Atendente_Fechamento,
+	Dt_fechamento,
+	Resultado_Campo,
+	F1,
+	Filtro_sucessos = 
+	case
+		when Resultado_Campo  not in('Sucesso Após D+0','Sucesso D+0','Sucesso D+1','Sucesso D+8','Sucesso Caça-POS') then Resultado_Campo
+		else ''
+	end
+from VW_Efetividade_fechamento_resultado_campo
+
+order by Nova_OS desc
+
+--Dá um update nos casos onde a NOVA OS foi aberta na central
+update TB_Efetividade_OP set 
+	TB_Efetividade_OP.Resultado_Campo ='OS REABERTA',
+	TB_Efetividade_OP.Filtro_sucessos ='OS REABERTA'
+
+	where 
+		TB_Efetividade_OP.Nova_OS IN(select os from TB_Efetividade_OP)
+		
+
+--Cria uma tabela com todos os usuários, removendo os duplicados
+CREATE TABLE #usuarios_fd(
+nome varchar(200),
+nivel varchar(2))		
+
+insert into #usuarios_fd(nome,nivel)	
+select 
+	MIN(nome) nome,MIN(NIVEL) NIVEL
+from usuario_fedex --where nome = 'RENAN SANTIAGO'
+GROUP BY nome
+
+--Define se é MEI ou OP com base no nível do usuário	
+update TB_Efetividade_OP
+	set 
+		F1 = case 
+		when nivel = '10' then 'MEI'
+		WHEN nivel = '15' THEN 'OP'
+		ELSE 'CTB'
+		END
+from #usuarios_fd
+	where TB_Efetividade_OP.Atendente_Fechamento  = #usuarios_fd.nome
+
+--usuários de fila que não podem aparecer como OP
+update TB_Efetividade_OP
+	set 
+		F1 = case 
+		when Atendente_Fechamento = 'ALEX GOMES' then 'CTB'
+		when Atendente_Fechamento = 'RAFAEL PEREIRA' then 'CTB'
+		when Atendente_Fechamento = 'QUALIDADE CENTRAL' then 'CTB'
+		when Atendente_Fechamento = 'IGOR ROCHA' then 'CTB'
+		ELSE F1
+		END
+from #usuarios_fd
+	where TB_Efetividade_OP.Atendente_Fechamento  = #usuarios_fd.nome
+
+
+--Define o restante dos nomes como CTB (pega os casos dos robôs)
+update TB_Efetividade_OP
+	set 
+		F1 = 'CTB'
+WHERE os IN(SELECT OS FROM TB_Efetividade_OP WHERE F1 = '')
+
+
+delete T FROM
+(SELECT *
+, DupRank = ROW_NUMBER() OVER (
+              PARTITION BY os
+              ORDER BY nova_os, REPLACE(Filtro_sucessos,'Nova OS não foi criada/localizada','z') desc
+            )
+FROM TB_Efetividade_OP
+--where os = '7102688807'
+--order by DupRank desc
+) AS T
+where  DupRank > 1  and 
+Nova_OS is null
+
+
+----remove os valores duplicados causados pelo join da tabela de nova OS
+DELETE T
+FROM
+(
+SELECT *
+, DupRank = ROW_NUMBER() OVER (
+              PARTITION BY os
+              ORDER BY nova_os desc
+            )
+FROM TB_Efetividade_OP
+--order by DupRank desc
+) AS T
+WHERE DupRank > 1 
+
+
+UPDATE TB_Efetividade_OP
+	SET Atendente_Fechamento =  'GUILHERME VIEIRA'
+WHERE Atendente_Fechamento ='GUSTAVO JESUS'
