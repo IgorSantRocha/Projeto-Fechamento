@@ -1,0 +1,73 @@
+/*
+Tipo: Stored procedure
+Função: Consome arquivo com o fechamento das horas (Folha de ponto) enviado pelo RH
+Parâmetros: Requer arquivo salvo na rede
+Retorno: Nenhum
+*/
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+ALTER PROCEDURE [dbo].[STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_RH] as
+
+DELETE FROM TB_FECHAMENTO_Relatorio_RH WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+--Adiciono as informações enviadas pelo RH
+insert into TB_FECHAMENTO_Relatorio_RH(
+    [NomeCompleto],
+	[Atrasos (Min)],
+	[Atrasos (Hr)],
+	[Faltas NÃO justificadas]--,
+	--[Faltas justificadas],
+	--[Observações]
+)
+
+
+Select 
+	[Nome],
+	--Converto em time as horas de atraso que vieram na planilha
+	[Atrasos (Min)] = case when [TIPO CONTRATO] = 'CLT' THEN isnull(convert(char,[Atrasos CLT],8),'00:00:00') ELSE isnull(convert(char,[Atrasos estagiários],8),'00:00:00') END,
+	--[Atrasos CLT] = isnull(convert(char,[Atrasos CLT],8),'00:00:00'),
+	--[Atrasos estagiários] = isnull(convert(char,[Atrasos estagiários],8),'00:00:00'),
+	--Converto de time para hora. Para poder calcular a porcentagem
+	[Atrasos (Hr)] = 0,--ROUND(cast(CAST(LTRIM(DATEDIFF(MINUTE, 0, isnull(convert(char,Atrasos,8),'00:00:00'))) AS int) as float)/60,3),
+	[Faltas NÃO justificadas] = cast(ISNULL([Faltas NÃO justificadas],0) as int)--,
+	--[Observações]  = ISNULL([Observações],'...')
+	--[Faltas justificadas] = ISNULL([Faltas justificadas],0),--[TIPO CONTRATO],--[PROJETO],--[EMPRESA],--[Atrasos (hrs)],--[hora extra (50%)],--[Hora extra 100%],--[Adicional Noturno  20%],	--[Desconto Falta (dias)],
+FROM OPENROWSET('Microsoft.ACE.OLEDB.12.0' ,'Excel 12.0;Database=E:\CONSUMIR\Relatorio_RH.xlsx;HDR=YES;IMEX=1' ,[Relatorio_RH$]) TBA
+where not exists(select [NomeCompleto] from TB_FECHAMENTO_Relatorio_RH where TB_FECHAMENTO_Relatorio_RH.nomecompleto = TBA.NOME and cast(criadoem as date) = cast(getdate() as date))
+
+UPDATE TB_FECHAMENTO_Relatorio_RH
+	SET [Atrasos (Hr)] = ROUND(cast(CAST(LTRIM(DATEDIFF(MINUTE, 0, isnull(convert(char,[Atrasos (Min)],8),'00:00:00'))) AS int) as float)/60,3)
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+/*
+SELECT 
+*
+FROM TB_FECHAMENTO_Relatorio_RH
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+*/
+
+--Dou update nos campos de porcentagem de descontos
+update TB_FECHAMENTO_Relatorio_RH
+	set 
+	[Desc. por atraso (-10% p/ hr)] = CASE WHEN CAST([Atrasos (Hr)] AS INT) >= 1 THEN [Atrasos (Hr)] * 10  ELSE 0 END,
+	[Desc. por faltas (-20% p/ dia)] = [Faltas NÃO justificadas] * 20
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+
+--Caso o valor exceda 100% coloco como 100
+update TB_FECHAMENTO_Relatorio_RH
+	set 
+	[Desc. por atraso (-10% p/ hr)] = CASE WHEN [Desc. por atraso (-10% p/ hr)] > 100 THEN 100  ELSE [Desc. por atraso (-10% p/ hr)] END,
+	[Desc. por faltas (-20% p/ dia)] = CASE WHEN [Desc. por faltas (-20% p/ dia)] > 100 THEN 100  ELSE [Desc. por faltas (-20% p/ dia)] END
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+
+
+select 'Relatorio_RH.xlsx consumido às: ' + CONVERT(char, getdate(),8)
