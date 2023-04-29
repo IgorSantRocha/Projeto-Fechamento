@@ -1,0 +1,220 @@
+/*
+Tipo: Stored procedure
+Função: Importa o arquivo já analisado para dentro do banco 
+Parâmetros: Nenhum (Mas requer arquivo criado na pasta da rede especificada)
+Retorno: Nenhum
+*/
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+ALTER PROCEDURE [dbo].[STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_BKO]
+AS
+
+IF(OBJECT_ID('tempdb..#TB_FECHAMENTO_RETENCAO') IS NOT NULL)
+    DROP TABLE #TB_FECHAMENTO_RETENCAO
+--drop table #TB_FECHAMENTO_RETENCAO
+CREATE TABLE #TB_FECHAMENTO_RETENCAO(
+	[Data_Abertura] [varchar](max) NULL ,
+	[OS] [varchar](max) NULL,
+	[Ocorrencia] [varchar](max) NULL,
+	[Unidade] [varchar](max) NULL,
+	[Atendente_Abertura] [varchar](max) NULL,
+	[Meio de abertura] [varchar](max) NULL,
+	[ANÁLISE DE HISTÓRICO] VARCHAR(MAX) NULL,
+	--[Problema_Apresentado] [text] NULL,
+	[Status] [varchar](max) NULL,
+	[Resultado C-Trends] [varchar](max) NULL,
+	[Resultado CAMPO] [varchar](max) NULL,
+	[FILTRO SUCESSOS] [varchar](max) NULL,	
+	[Data_fechamento]  [varchar](max) NULL,
+	[Atendente_Fechamento] [varchar](max) NULL,
+	[F1] [varchar](max) NULL,	
+	[Projeto] [varchar](max) NULL,
+	[Tipo_Atendimento] [varchar](max) NULL,
+	[Acao_D1] [varchar](max) NULL,
+	[Acao_D29] [varchar](max) NULL,
+	[Razao_Social] [varchar](max) NULL,
+	[Subprojeto] [varchar](max) NULL,
+	[PV] [varchar](max) NULL,
+	[Dt_ultima_atu] [varchar](max) NULL,
+	CONCLUSAO_OPERADOR [varchar](max) NULL,
+	[DEFINICAO] [varchar](max) NULL,
+	[Cliente] [varchar](max) NULL,
+	[NOVA_OS] [varchar](max) NULL,
+	[Status Sistema Cliente] [varchar](max) NULL,
+	[Descrição Última Ocorrência] [varchar](max) NULL,
+	[Descrição Penúltima Ocorrência] [varchar](max) NULL,
+	[Descrição Antepenúltima Ocorrência] [varchar](max) NULL,
+	[Data Pre-Baixa] [varchar](max) NULL,
+	[Data Baixa Sistema] [varchar](max) NULL,
+	[Chamado Cancelado] varchar(max) null,
+	[ANÁLISE VERIFICAR OS] varchar(max) null,
+	)
+
+
+--select * from #TB_FECHAMENTO_RETENCAO
+--importa todas as colunas do arquivo direto para a tabela temporária
+BULK INSERT  #TB_FECHAMENTO_RETENCAO FROM 'E:\CONSUMIR\FECHAMENTO_OP.csv' --Salvo como .CSV (MS_DOS)
+   WITH (
+      FIELDTERMINATOR = ';',
+      ROWTERMINATOR = '\n'
+)
+
+
+
+--Confiro se as colunas não desalinharam
+IF (
+select top 1
+case
+	when
+	cast([Data_Abertura] as varchar(max)) <> 'Data_Abertura' or 
+	cast([OS] as varchar(max)) <> 'OS' or 
+	cast([Ocorrencia] as varchar(max)) <> 'Ocorrencia' or 
+	cast([Unidade] as varchar(max)) <> 'Unidade' or 
+	cast([Atendente_Abertura] as varchar(max)) <> 'Atendente_Abertura' or 
+	cast([Meio de abertura] as varchar(max)) <> 'Meio de abertura' or 
+	--cast([Problema_Apresentado] as varchar(max)) <> 'Problema_Apresentado' or 
+	cast([Status] as varchar(max)) <> 'Status' or 
+	cast([Resultado C-Trends] as varchar(max)) <> 'Resultado C-Trends' or 
+	cast([Resultado CAMPO] as varchar(max)) <> 'Resultado Campo' or 
+	cast([Data_fechamento] as varchar(max)) <> 'Data_fechamento' or 
+	cast([Atendente_Fechamento] as varchar(max)) <> 'Atendente_Fechamento' or 
+	cast([F1] as varchar(max)) <> 'F1' or 
+	cast([Projeto] as varchar(max)) <> 'Projeto' or 
+	cast([Tipo_Atendimento] as varchar(max)) <> 'Tipo_Atendimento' or 
+	cast([Acao_D1] as varchar(max)) <> 'Acao_D1' or 
+	cast([Acao_D29] as varchar(max)) <> 'Acao_D29' or 
+	cast([Razao_Social] as varchar(max)) <> 'Razao_Social' or 
+	cast([Subprojeto] as varchar(max)) <> 'Subprojeto' or 
+	cast([PV] as varchar(max)) <> 'PV' or 
+	cast([Dt_ultima_atu] as varchar(max)) <> 'Dt_ultima_atu' or 
+	cast([CONCLUSAO_OPERADOR] as varchar(max)) <> 'CONCLUSAO_OPERADOR' or 
+	cast([DEFINICAO] as varchar(max)) <> 'DEFINICAO' or 
+	cast([Cliente] as varchar(max)) <> 'Cliente' or 
+	cast([Descrição Última Ocorrência] as varchar(max)) <> 'Descrição Última Ocorrência' or 
+	cast([Descrição Penúltima Ocorrência] as varchar(max)) <> 'Descrição Penúltima Ocorrência' or 
+	cast([Descrição Antepenúltima Ocorrência] as varchar(max)) <> 'Descrição Antepenúltima Ocorrência' or 
+	cast([Chamado Cancelado] as varchar(max)) <> 'Chamado Cancelado' 
+then 'Colunas desalinhadas'
+end
+from #TB_FECHAMENTO_RETENCAO
+where Data_Abertura = 'Data_Abertura') = 'Colunas desalinhadas'
+
+BEGIN 
+	SELECT 'COLUNAS DESALINHADAS OU COM NOMES INCORRETOS'
+END
+ELSE
+BEGIN
+
+DELETE FROM #TB_FECHAMENTO_RETENCAO WHERE OS = 'OS'
+
+truncate table TB_FECHAMENTO_RETENCAO
+insert into TB_FECHAMENTO_RETENCAO(
+	[Data_Abertura],
+	[OS],
+	--[Ocorrencia],
+	--[Unidade],
+	--[Atendente_Abertura],
+	--[Meio de abertura],
+	[ANÁLISE DE HISTÓRICO],
+	[Problema_Apresentado],
+	[Status],
+	[Resultado C-Trends],
+	[Resultado CAMPO],
+	[FILTRO SUCESSOS],
+	[Data_fechamento],
+	[Atendente_Fechamento],
+	[F1],
+	[Projeto],
+	[Tipo_Atendimento],
+	[Acao_D1],
+	[Acao_D29],
+	--[Razao_Social],
+	--[Subprojeto],
+	--[PV],
+	[Dt_ultima_atu],
+	[CONCLUSAO_OPERADOR],
+	[DEFINICAO],
+	[Cliente],
+	[NOVA_OS],
+	[Status Sistema Cliente],
+	[Descrição Última Ocorrência],
+	[Descrição Penúltima Ocorrência],
+	[Descrição Antepenúltima Ocorrência],
+	[Data Pre-Baixa],
+	[Data Baixa Sistema],
+	[Chamado Cancelado],
+	[ANÁLISE -VERIFICAR OS-]
+	--*/
+)
+
+
+SELECT 
+	CONVERT(DATE, Data_Abertura, 103) [Data_Abertura],
+	#TB_FECHAMENTO_RETENCAO.[OS],
+	--[Ocorrencia],
+	--[Unidade],
+	--[Atendente_Abertura],
+	--[Meio de abertura],
+	[ANÁLISE DE HISTÓRICO],
+	TB_PROJETO_FEDEX.[Problema_Apresentado],
+	left(#TB_FECHAMENTO_RETENCAO.[Status],250) [Status],
+	[Resultado C-Trends] = LEFT([Resultado C-Trends],250),
+	[Resultado CAMPO]  = LEFT([Resultado CAMPO],250),
+	[FILTRO SUCESSOS]  = LEFT([FILTRO SUCESSOS],250),
+
+	CONVERT(DATE, [Data_fechamento], 103) [Data_fechamento],
+	#TB_FECHAMENTO_RETENCAO.[Atendente_Fechamento],
+	#TB_FECHAMENTO_RETENCAO.[F1],
+	#TB_FECHAMENTO_RETENCAO.[Projeto],
+	#TB_FECHAMENTO_RETENCAO.[Tipo_Atendimento],
+	#TB_FECHAMENTO_RETENCAO.[Acao_D1],
+	#TB_FECHAMENTO_RETENCAO.[Acao_D29],
+	--[Razao_Social],
+	--[Subprojeto],
+	--[PV],
+	--CONVERT(DATEtime, #TB_FECHAMENTO_RETENCAO.[Dt_ultima_atu], 103) [Dt_ultima_atu],
+	#TB_FECHAMENTO_RETENCAO.[Dt_ultima_atu],
+	#TB_FECHAMENTO_RETENCAO.[CONCLUSAO_OPERADOR],
+	#TB_FECHAMENTO_RETENCAO.[DEFINICAO],
+	#TB_FECHAMENTO_RETENCAO.[Cliente],
+	#TB_FECHAMENTO_RETENCAO.[NOVA_OS],
+	--A qualidade coloca um "-" nas colunas do R-LOG para casos que não são sucesso. Uso o case when para mudar isso para Null
+	[Status Sistema Cliente] = CASE WHEN [Status Sistema Cliente] = '-' THEN NULL ELSE [Status Sistema Cliente] END,
+	[Descrição Última Ocorrência] =CASE WHEN [Descrição Última Ocorrência] = '-' THEN NULL ELSE [Descrição Última Ocorrência] END,
+	[Descrição Penúltima Ocorrência]  =CASE WHEN [Descrição Penúltima Ocorrência] = '-' THEN NULL ELSE [Descrição Penúltima Ocorrência] END,
+	[Descrição Antepenúltima Ocorrência] =CASE WHEN [Descrição Antepenúltima Ocorrência] = '-' THEN NULL ELSE [Descrição Antepenúltima Ocorrência] END,
+	[Data Pre-Baixa] = case when [Data Pre-Baixa] not in('-','00/01/1900') then CONVERT(DATE, [Data Pre-Baixa], 103) else null end ,
+	[Data Baixa Sistema] = case when [Data Baixa Sistema] not in('-','00/01/1900') then CONVERT(DATE, [Data Baixa Sistema], 103) else null end ,
+	--CONVERT(DATE, replace([Data Baixa Sistema],'-',null), 103) [Data Baixa Sistema],
+	[Chamado Cancelado] = case [Chamado Cancelado] when '-' then null else [Chamado Cancelado] end,
+	[ANÁLISE VERIFICAR OS]
+	
+FROM #TB_FECHAMENTO_RETENCAO
+LEFT JOIN TB_PROJETO_FEDEX ON #TB_FECHAMENTO_RETENCAO.OS = TB_PROJETO_FEDEX.OS
+where #TB_FECHAMENTO_RETENCAO.OS is not null
+
+--Marco os casos que eram PENDENTES do mês anterior e foram atendidos
+update TB_FECHAMENTO_RETENCAO
+	set [FILTRO SUCESSOS] = null
+where [FILTRO SUCESSOS] IN('PENDENTE DO MÊS ANT.','PENDENTE MÊS ANT.')
+and left([Resultado CAMPO],7)= 'Sucesso'
+
+
+END
+
+
+select 'FECHAMENTO_OP.csv consumido com sucesso às: ' + CONVERT(char, getdate(),8)
+
+
+GO
+
+
