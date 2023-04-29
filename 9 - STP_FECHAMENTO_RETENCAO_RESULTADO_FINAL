@@ -1,0 +1,311 @@
+/*
+Tipo: Stored procedure
+Função:  Faz o calculo final dos valores por atendente.
+ Levando em conta a quantidae salva para saber em que faixa da meta ele está, bem como o fechamento de horas para calcular as porcentagens de desconto.
+Parâmetros: Nenhum
+Retorno: Nenhum (Temos um software que irá buscar o resultado final direto da tabela)
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+ALTER PROCEDURE [dbo].[STP_FECHAMENTO_RETENCAO_RESULTADO_FINAL] AS
+if (select  COUNT(distinct Criadoem) from TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL where month(Criadoem) = month(getdate())) <> 0
+begin	
+	SELECT 'ATENÇÃO', 'Já houve outro fechamento consumido no dia:',(select  distinct Criadoem from TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL where month(Criadoem) = month(getdate())),'Arquivo anterior deletado e gerado novamente'
+	--RETURN --Para a procedure aqui.
+end
+
+/*****************************************************************/
+-- CONSUMINDO ARQUIVOS DE RETORNO DA QUALIDADE, SUPERVISÃO E RH --
+/*****************************************************************/
+
+
+
+			------------------------------------
+			--Verifica se as planilhas existem--
+			------------------------------------
+			
+CREATE TABLE #TB_procura_arquivo_FECHAMENTO_OP(FileExists BIT, FileDirect BIT, ParentDirect BIT)			
+insert into #TB_procura_arquivo_FECHAMENTO_OP
+EXEC master..xp_fileexist 'e:\CONSUMIR\FECHAMENTO_OP.CSV'
+
+	
+CREATE TABLE #TB_procura_arquivo_Relatorio_RH(FileExists BIT, FileDirect BIT, ParentDirect BIT)			
+insert into #TB_procura_arquivo_Relatorio_RH
+EXEC master..xp_fileexist 'e:\CONSUMIR\Relatorio_RH.xlsx'
+
+			
+CREATE TABLE #TB_procura_arquivo_Excecoes_fechamento(FileExists BIT, FileDirect BIT, ParentDirect BIT)			
+insert into #TB_procura_arquivo_Excecoes_fechamento
+EXEC master..xp_fileexist 'e:\CONSUMIR\Excecoes_fechamento.xlsx'
+
+
+create table #TB_CONTROLE_ARQUIVOS(NOME VARCHAR(50), EXISTE BIT)
+INSERT INTO #TB_CONTROLE_ARQUIVOS(NOME, EXISTE)
+
+SELECT NOME = 'Excecoes_fechamento.xlsx', FileExists from #TB_procura_arquivo_Excecoes_fechamento
+UNION ALL
+SELECT NOME = 'Relatorio_RH.xlsx', FileExists from #TB_procura_arquivo_Relatorio_RH
+UNION ALL
+SELECT NOME = 'FECHAMENTO_OP.CSV', FileExists from #TB_procura_arquivo_FECHAMENTO_OP
+
+
+IF (SELECT COUNT(*) FROM #TB_CONTROLE_ARQUIVOS WHERE EXISTE = 0) <> 0	
+	BEGIN
+		SELECT [Arquivo(s) faltando] = NOME from #TB_CONTROLE_ARQUIVOS WHERE EXISTE = 0
+		RETURN
+	END	
+ELSE
+	BEGIN
+		EXEC [STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_EXCECOES_SUP]
+		EXEC STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_RH
+		EXEC [STP_FECHAMENTO_RETENCAO_CONSOME_RETORNO_BKO]
+	END
+
+
+/*****************************************************************/
+--                FIM DO CONSUMO DOS ARQUIVOS				    --
+/*****************************************************************/
+
+
+
+DELETE FROM TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+--DROP TABLE #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE
+UPDATE TB_FECHAMENTO_RETENCAO
+	SET Atendente_Fechamento = 'GUILHERME VIEIRA'
+WHERE Atendente_Fechamento = 'GUSTAVO JESUS'
+
+-- Crio uma tabela temporária que vai receber os calculos de quantidades em cada fase
+Create table #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE(
+	[Atendente_Fechamento] Varchar(100) not null,
+	[NomeCompleto] Varchar(250) null,
+	[Sucesso D+0] int not null,
+	[Sucesso D+1] int not null,
+	[Sucesso D+8] int not null,
+	[Total salvo] int not null,
+	[Faixa meta] varchar(7),
+	[Descrição faixa] varchar(100) null,
+	[Valor p/ OS] money,
+	--[valor p/ OS (em reais)] varchar(10),
+	[V. total salvo] money
+	--[Total calculado (em reais)]  varchar(10)
+)
+insert into #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE(
+	[Atendente_Fechamento],
+	[NomeCompleto],
+	[Sucesso D+0],
+	[Sucesso D+1],
+	[Sucesso D+8],
+	[Total salvo]
+	)
+--usei o count(*) com Pivot para contar quantas linhas de cada coisa tem no [Resultado CAMPO] e adicionar em suas respectivas colunas
+SELECT 
+	Atendente_Fechamento,
+	TB_Usuario_Fedex_Nome_Completo.NomeCompleto,
+	--Projeto,
+    [Sucesso D+0],
+    [Sucesso D+1],
+    [Sucesso D+8],
+    [Total salvo] =coalesce([Sucesso D+0],0)+coalesce([Sucesso D+1],0)+coalesce([Sucesso D+8],0)
+FROM
+    (select 
+		Atendente_Fechamento,
+		--Projeto,
+		[Resultado CAMPO]=
+		(case 
+			when [Resultado CAMPO] = 'Sucesso Após D+0'  and Tipo_Atendimento = 'Desinstalação' then 'Sucesso D+8'
+			when [Resultado CAMPO] = 'Sucesso Após D+0'  and Tipo_Atendimento in('Instalação','Troca') then 'Sucesso D+1'
+			else [Resultado CAMPO]
+		end)
+	from TB_FECHAMENTO_RETENCAO
+	WHERE [FILTRO SUCESSOS] IS NULL
+	and cast(TB_FECHAMENTO_RETENCAO.criadoem as date) = cast(getdate() as date)
+)AS TB
+	PIVOT
+	(
+		COUNT([Resultado CAMPO]) 
+		FOR	[Resultado CAMPO] IN ( [Sucesso D+0], [Sucesso D+1],[Sucesso D+8])
+	) AS PV 
+left join usuario_fedex on nome = Atendente_Fechamento
+left join TB_Usuario_Fedex_Nome_Completo on usuario_fedex.id = TB_Usuario_Fedex_Nome_Completo.ID_Usuario
+order by Atendente_Fechamento
+
+
+
+--Insiro os atendentes da Rig Vizzion caso eles não tenham OS de sucesso no fechamento.
+insert into #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE(
+	[Atendente_Fechamento],
+	[NomeCompleto],
+	[Sucesso D+0],
+	[Sucesso D+1],
+	[Sucesso D+8],
+	[Total salvo]
+	)
+select
+	[TB_FECHAMENTO_RIG_VIZZION].[Nome Atendente],
+	TB_Usuario_Fedex_Nome_Completo.Nomecompleto,
+	[Sucesso D+0] = 0,
+    [Sucesso D+1] = 0,
+    [Sucesso D+8] = 0,
+    [Total salvo] = 0
+from [TB_FECHAMENTO_RIG_VIZZION]
+JOIN TB_Usuario_Fedex_Nome_Completo ON TB_Usuario_Fedex_Nome_Completo.ID_Usuario = [TB_FECHAMENTO_RIG_VIZZION].ID_Usuario
+WHERE NOT EXISTS(SELECT Atendente_Fechamento FROM #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE WHERE #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.Atendente_Fechamento = [TB_FECHAMENTO_RIG_VIZZION].[Nome Atendente])
+
+
+
+
+
+
+--Dou update nas colunas de valor, buscando pela quantidade total de salvos e comparando com a tabela de objetivos
+update #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE
+	set 
+	[Faixa meta] = TB_FECHAMENTO_FAIXAS_OBJETIVOS.Faixa,
+	[Valor p/ OS] = TB_FECHAMENTO_FAIXAS_OBJETIVOS.[Valor unidade],
+	[V. total salvo] = [Total salvo] * [Valor unidade],
+	[Descrição faixa] = DescFaixa --DescFaixa é criada na trigger da TB_FECHAMENTO_FAIXAS_OBJETIVOS
+from TB_FECHAMENTO_FAIXAS_OBJETIVOS
+where #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Total salvo]  between Mínima and Máxima
+
+--Dou Update mudando a meta para os atendentes marcados como exceção pela supervisão. E também para os atendentes com menos de 30 dias na empresa.
+update #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE set
+	[Faixa meta] = 'Faixa 0',
+	[Valor p/ OS] = 1.05,
+	[V. total salvo] = [Total salvo] * 1.05,
+	[Descrição faixa] = 'Exceção. Valor p/ OS fixado em 1.05'
+from TB_FECHAMENTO_EXCECOES_ATENDENTES 
+where TB_FECHAMENTO_EXCECOES_ATENDENTES.NOME_ATENDENTE = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Atendente_Fechamento]
+and TB_FECHAMENTO_EXCECOES_ATENDENTES.[Exceção meta] = 1
+
+
+
+
+--DROP TABLE #TB_FECHAMENTO_Relatorio_RH
+--Crio uma tabela onde adiciono as informações enviadas pelo RH
+Create table #TB_FECHAMENTO_Relatorio_RH(
+	[NomeCompleto] varchar(250) not null,
+	[Atrasos (Min)] varchar(8) null,
+	[Atrasos (Hr)] FLOAT not null,
+	[Desc. por atraso (-10% p/ hr)]  FLOAT NULL,
+	[Faltas NÃO justificadas] int not null,
+	[Desc. por faltas (-20% p/ dia)] int null
+)
+
+insert into #TB_FECHAMENTO_Relatorio_RH(
+    [NomeCompleto],
+	[Atrasos (Min)],
+	[Atrasos (Hr)],
+	[Faltas NÃO justificadas],
+	[Desc. por atraso (-10% p/ hr)],
+	[Desc. por faltas (-20% p/ dia)]
+	--[Faltas justificadas],
+	--[Observações]
+)
+Select 
+	[NomeCompleto],
+	[Atrasos (Min)],
+	[Atrasos (Hr)],
+	[Faltas NÃO justificadas],
+	[Desc. por atraso (-10% p/ hr)],
+	[Desc. por faltas (-20% p/ dia)]
+FROM TB_FECHAMENTO_Relatorio_RH
+Where cast(criadoem as date) = cast(getdate() as date)
+
+/*
+--Dou update nos campos de porcentagem de descontos
+update #TB_FECHAMENTO_Relatorio_RH
+	set 
+	[Desc. por atraso (-10% p/ hr)] = CASE WHEN CAST([Atrasos (Hr)] AS INT) >= 1 THEN [Atrasos (Hr)] * 10  ELSE 0 END,
+	[Desc. por faltas (-20% p/ dia)] = [Faltas NÃO justificadas] * 20
+*/
+
+
+--
+insert into TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL(
+[Atendente_Fechamento],
+[NomeCompleto],
+[Sucesso D+0],
+[Sucesso D+1],
+[Sucesso D+8],
+[Total salvo],
+[Exceção],
+[Faixa meta],
+[Descrição faixa],
+[Valor p/ OS],
+[V. total salvo],
+[Bônus 0800],
+[Bônus Rig Vizzion],
+[Bônus Treindamento],
+[Bônus comprometimento],
+[V. total bônus],
+[Atrasos (Min)],
+[Atrasos (Hr)],
+[Desc. por atraso (-10% p/ hr)],
+[Faltas NÃO justificadas],
+[Desc. por faltas (-20% p/ dia)]
+)
+
+--faço o join entre as duas temporárias para calcular quanto deve ser descontado por atrasos e faltas
+select 
+	[Atendente_Fechamento],
+	#TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[NomeCompleto],
+	[Sucesso D+0],
+	[Sucesso D+1],
+	[Sucesso D+8],
+	[Total salvo],
+	[Exceção] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Exceção meta],0),
+	#TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Faixa meta],
+	#TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Descrição faixa],
+	[Valor p/ OS] = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Valor p/ OS],
+	[V. total salvo] = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[V. total salvo],
+	[Bônus 0800] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[0800],0),
+	[Bônus Rig Vizzion] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Rig Vizzion],0),
+	[Bônus Treindamento] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Treinamento],0),
+	[Bônus comprometimento] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Bônus comprometimento],0),
+	[V. total bônus] = isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[0800],0)+isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Rig Vizzion],0)+isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Treinamento],0)+isnull(TB_FECHAMENTO_EXCECOES_ATENDENTES.[Bônus comprometimento],0),
+	[Atrasos (Min)],
+	[Atrasos (Hr)],
+	[Desc. por atraso (-10% p/ hr)],
+	[Faltas NÃO justificadas],
+	[Desc. por faltas (-20% p/ dia)]
+from #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE
+left join #TB_FECHAMENTO_Relatorio_RH on #TB_FECHAMENTO_Relatorio_RH.nomecompleto = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[NomeCompleto]
+left join TB_FECHAMENTO_EXCECOES_ATENDENTES on TB_FECHAMENTO_EXCECOES_ATENDENTES.NOME_ATENDENTE = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.[Atendente_Fechamento]
+where [Atendente_Fechamento] not in('VINICIUS SA','LUCAS MATHEUS','MATHEUS FREIRE','PEDRO SILVA','GUILHERME MACEDO','FELIPE FERREIRA')/*Exceção pois eles já saíram. Pode ser retirada em 02/02/2023. Os próximos casos não precisará criar exceção*/
+AND NOT EXISTS(SELECT NOMECOMPLETO FROM TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL WHERE TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL.NOMECOMPLETO = #TB_FECHAMENTO_RETENCAO_QTD_POR_FASE.NOMECOMPLETO AND CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE ) )
+AND [Atrasos (Min)] IS NOT NULL
+
+
+update TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL set
+	[V. Total s/ desc.] = [V. total salvo] + [V. total bônus]
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
+
+
+update TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL set
+	[Desconto ref atrasos] = ROUND([V. Total s/ desc.] - [V. Total s/ desc.] * cast((100-[Desc. por atraso (-10% p/ hr)]) as money) / 100,2),
+	[Desconto ref faltas] = ROUND([V. Total s/ desc.] - [V. Total s/ desc.] * cast((100-[Desc. por faltas (-20% p/ dia)]) as money) / 100,2),
+	[Observações] = [Descrição faixa]+
+					case
+						when [Bônus 0800]<>0  then ' / + Bônus Atendimento 0800' else ''
+					end+
+					case
+						when [Bônus Rig Vizzion]<>0  then ' / + Bônus Atendimento Rig Vizzion' else ''
+					end+
+					case
+						when [Bônus Treindamento]<>0  then ' / + Bônus Treinamento' else ''
+					end+
+					case
+						when [Bônus comprometimento]<>0  then ' / + Bônus comprometimento' else ''
+					end
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)					
+
+UPDATE TB_FECHAMENTO_RETENCAO_RESULTADO_FINAL SET 
+	[TOTAL À RECEBER] = [V. Total s/ desc.] - [Desconto ref atrasos] - [Desconto ref faltas]
+WHERE CAST(CRIADOEM AS DATE) = CAST(GETDATE() AS DATE)
