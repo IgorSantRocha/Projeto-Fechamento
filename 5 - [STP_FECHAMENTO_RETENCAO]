@@ -1,0 +1,153 @@
+/*Tipo: Stored procedure
+Função:  Carregar e exibir no grid os casos para serem analisados manualmente. Também roda  outra procedure que  manda um e-mail para a supervisão(Código no arquivo anterior)
+Parâmetros: Data inicial, para filtro dos casos na tabela principal
+Retorno: Grid com os casos para serem analisados
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+ALTER PROCEDURE [dbo].[STP_FECHAMENTO_RETENCAO] (@dt_inicial as date) AS
+
+  /**************************************************************/
+-- Usado pela qualidade para puxar os casos para analise manual --
+/**************************************************************/
+IF(OBJECT_ID('tempdb..#TB_FECHAMENTO_RETENCAO') IS NOT NULL)
+    DROP TABLE #TB_FECHAMENTO_RETENCAO
+
+CREATE TABLE #TB_FECHAMENTO_RETENCAO(
+	[Data_Abertura] [date] NULL,
+	[OS] [varchar](250) NULL,
+	[Ocorrencia] [varchar](250) NULL,
+	[Unidade] [varchar](max) NULL,
+	[Atendente_Abertura] [varchar](250) NULL,
+	[Meio de abertura] [varchar](250) NULL,
+	[ANÁLISE DE HISTÓRICO] VARCHAR(MAX) NULL,
+	[Problema_Apresentado] [text] NULL,
+	[Status] [varchar](250) NULL,
+	[Resultado C-Trends] [varchar](250) NULL,
+	[Resultado CAMPO] [varchar](250) NULL,
+	[FILTRO SUCESSOS] [varchar](250) NULL,	
+	[Data_fechamento] [date] NULL,
+	[Atendente_Fechamento] [varchar](250) NULL,
+	[F1] [varchar](250) NULL,	
+	[Projeto] [varchar](250) NULL,
+	[Tipo_Atendimento] [varchar](250) NULL,
+	[Acao_D1] [varchar](250) NULL,
+	[Acao_D29] [varchar](250) NULL,
+	[Razao_Social] [varchar](250) NULL,
+	[Subprojeto] [varchar](250) NULL,
+	[PV] [varchar](250) NULL,
+	[Dt_ultima_atu] [datetime] NULL,
+	CONCLUSAO_OPERADOR [varchar](250) NULL,
+	[DEFINICAO] [varchar](250) NULL,
+	[Cliente] [varchar](max) NULL,
+	[NOVA_OS] [varchar](250) NULL,
+	[Status Sistema Cliente] [varchar](250) NULL,
+	[Descrição Última Ocorrência] [varchar](250) NULL,
+	[Descrição Penúltima Ocorrência] [varchar](250) NULL,
+	[Descrição Antepenúltima Ocorrência] [varchar](250) NULL,
+	[Data Pre-Baixa] [date] NULL,
+	[Data Baixa Sistema] [date] NULL,
+	[Chamado Cancelado] varchar(3) null,
+	[ANÁLISE *VERIFICAR OS*] varchar(max) null
+	)
+
+
+insert into #TB_FECHAMENTO_RETENCAO(
+	Data_Abertura,
+	OS,
+	Ocorrencia,
+	Unidade,
+	Atendente_Abertura,
+	[Meio de abertura],
+	--[ANÁLISE DE HISTÓRICO],
+	Problema_Apresentado,
+	[Status],
+	[Resultado C-Trends],
+	[Resultado CAMPO],
+	[FILTRO SUCESSOS],
+	Data_fechamento,
+	Atendente_Fechamento,
+	F1,
+	Projeto,
+	Tipo_Atendimento,
+	Acao_D1,
+	Acao_D29,
+	Razao_Social,
+	Subprojeto,
+	PV,
+	Dt_ultima_atu,
+	CONCLUSAO_OPERADOR,
+	DEFINICAO,
+	Cliente,
+	Nova_OS,
+	[Status Sistema Cliente],
+	[Descrição Última Ocorrência],
+	[Descrição Penúltima Ocorrência],
+	[Descrição Antepenúltima Ocorrência],
+	[Data Pre-Baixa],
+	[Data Baixa Sistema],
+	[Chamado Cancelado]/*,
+	[ANÁLISE *VERIFICAR OS*]*/
+
+)
+
+--Seleciono os casos da TB_fechamento_OP e preencho as demais colunas com join na tb_projeto_fedex e na TB_relatorios
+select 
+	[Data_Abertura] = cast(TB_PROJETO_FEDEX.[Dt_Abertura] as date),
+	TB_Efetividade_OP.[OS],
+	TB_PROJETO_FEDEX.[Ocorrencia],
+	TB_PROJETO_FEDEX.[Unidade],
+	TB_PROJETO_FEDEX.[Atendente_Abertura],
+	[Meio de abertura] = (CASE TB_PROJETO_FEDEX.[Atendente_Abertura] 
+							WHEN 'Online' then 'APP'
+							WHEN 'Chatbot' Then 'CHATBOT'
+							ELSE '0800' END),
+	--[ANÁLISE DE HISTÓRICO] ='',
+	[Problema_Apresentado],
+	TB_PROJETO_FEDEX.[Status],
+	dbo.Fn_resultado_ctrends(TB_PROJETO_FEDEX.[status],Acao_D1,ACAO_D29) [Resultado C-Trends],
+	Resultado_Campo = (case when TB_Relatorio_pedido.[Status] IS null then 'OS não foi encontrada (INSUCESSOS)' else Resultado_Campo end),
+	TB_Efetividade_OP.Filtro_sucessos,
+	TB_Efetividade_OP.[Dt_fechamento],
+	TB_Efetividade_OP.[Atendente_Fechamento],
+	[F1],
+	TB_PROJETO_FEDEX.[Projeto],
+	[Tipo_Atendimento],
+	[Acao_D1],
+	[Acao_D29],
+	[Razao_Social],
+	TB_PROJETO_FEDEX.[Subprojeto],
+	[PV],
+	[Dt_ultima_atu],
+	[CONCLUSAO_OPERADOR],
+	[DEFINICAO],
+	[Cliente],
+	Nova_OS,
+	TB_RELATORIO_PEDIDO.[Status] [Status Sistema Cliente],
+	[Descrição Última Ocorrência],
+	[Descrição Penúltima Ocorrência],
+	[Descrição Antepenúltima Ocorrência],
+	[Data Pre-Baixa],
+	[Data Baixa Sistema],
+	[Chamado Cancelado]/*,
+	--[ANÁLISE *VERIFICAR OS*]=''*/
+from TB_Efetividade_OP
+JOIN TB_PROJETO_FEDEX ON TB_Efetividade_OP.OS = TB_PROJETO_FEDEX.OS
+LEFT JOIN TB_Relatorio_pedido ON ISNULL(TB_Efetividade_OP.NOVA_OS,TB_Efetividade_OP.OS) = TB_Relatorio_pedido.OS
+
+--Esta procedure atualzia a tabela de atendentendes ativos na retenção e envia no e-mail para a supervisão informar as exceções
+EXEC [STP_FECHAMENTO_RETENCAO_EXCECOES_ATENDENTES]
+
+
+select 
+*
+from #TB_FECHAMENTO_RETENCAO
+WHERE Data_fechamento >= @dt_inicial
